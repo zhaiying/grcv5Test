@@ -1,0 +1,102 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# @Time    : 2018-01-15 13:20
+# plugins/sysmenu.py
+import pdb
+from log.log import Logger
+from time import sleep
+
+from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.action_chains import ActionChains as AC
+
+import re
+
+
+from encapsulation.fields import BaseField
+#pdb.set_trace()
+from config import currentProject
+
+#插件中不能使用innerload访问ext.models，因为models中引用了plugins.*，会产生循环调用，此处已经修改
+#Model_LazyTree=currentProject.innerload('ext.models.Model_LazyTree')
+#Model_Ulist=currentProject.innerload('ext.models.Model_Ulist')
+#from model import Model_SysMenu
+
+# 界面测试组件维护在此--基本界面组件
+# 包括 sys_menu
+__default_encoding__="gbk"
+class Plug_Sys_Menu(BaseField):
+    '''系统菜单
+    '''
+    f_type='sys_menu'
+    def __init__(self,uihandle,element,page="", siteName="",context={}):
+        self.handle=uihandle
+        #与ztree原型不同，界面模型使用触发按钮作为element，需要转换一下
+        el=Model_SysMenu_v7(uihandle,element,context=context)
+        self.el=el
+        self.el_name=element
+        self.context=context
+        #getConfig use the property context,so it must be used at last.
+        self.wait=self.getConfig('wait',default=0,toType='float')
+            
+    def send(self,selections,context={},codebase='gbk'):
+        
+        self.el.send(selections)
+        sleep(self.wait)
+
+#系统菜单对象
+class Model_SysMenu_v7(BaseField):
+    '''系统菜单类型
+    特点是 每一级菜单是li,第二级以下是dt,dd,a
+    '''
+    f_type='SysMenu_base_v7'
+    def __init__(self, uihandle, element='系统主导航菜单',context={}):
+        self.handle = uihandle
+        self.el_name = element
+        self.context=context
+        self.dismiss = self.getConfig('dismiss',default='',toType='str')
+    def send(self,menus):
+        if(menus==""):
+            return
+        seperator='/'
+        pdb.set_trace()
+        root = self.handle.element('',self.el_name)
+        self.click(root,menus)
+        
+        #如果有dismiss参数，说明浮动菜单不会自己消失，必须移走光标，所以dismiss存放的是移走光标的位置锚点
+        if(self.dismiss!=''):
+            self.handle.moveTo(self.dismiss,context=self.context)
+    def click(self,cntr_node,menus,level=0):
+        found = False
+        if(menus==""):
+            #the sub-menus is empty, so all the menus have been found 
+            return True
+        seperator='/'
+        menus_a = menus.split(seperator)
+        label=menus_a[0]
+        first_node = self.first_level_node(cntr_node,label)
+        if first_node!=None and len(menus_a)>1:
+            label=menus_a[1]
+            second_node = self.second_level_node(first_node,label)
+            found = True
+        return found
+    #菜单第一级节点，触发悬浮效果，以便点击二级菜单
+    def first_level_node(self,cntr_node,label):
+        nodes = cntr_node.find_elements_by_css_selector('li')
+        for i in range(0,len(nodes)):
+            title=nodes[i].get_attribute('innerText')
+            if label.decode(__default_encoding__).strip() == title.strip():
+                self.handle.moveToElement(nodes[i])
+                sleep(0.5)
+                return nodes[i]
+        return None
+    #菜单第二级节点，触发点击，执行对应功能。注意，分类项只用于分割显示，不算在菜单体系内。例如：个人办公>个人日程>我的日程，其中，"个人日程"只是分类显示，实际的菜单项是“个人办公/我的日程”
+    def second_level_node(self,cntr_node,label):
+        nodes = cntr_node.find_elements_by_css_selector('dl>dd>a')
+        for i in range(0,len(nodes)):
+            title=nodes[i].get_attribute('text')
+            if label.decode(__default_encoding__).strip() == title.strip():
+                nodes[i].click()
+                sleep(2)
+                return nodes[i]
+        return None
